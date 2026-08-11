@@ -1,4 +1,4 @@
-package org.example.orderservice.service;
+package org.example.orderservice.producer;
 
 import org.example.events.OrderEvent;
 import lombok.RequiredArgsConstructor;
@@ -12,9 +12,7 @@ public class OrderProducer {
     private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
 
     public void publish(OrderEvent event){
-
         kafkaTemplate.send("order-created", event);
-
     }
 
 }

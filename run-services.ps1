@@ -7,7 +7,7 @@ $root = $PSScriptRoot
 Write-Host "Project root: $root" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "Starting order-service..." -ForegroundColor Green
+Write-Host "Starting order-service..." -ForegroundColor Cyan
 
 Start-Process powershell -ArgumentList @(
     "-NoExit",
@@ -18,7 +18,7 @@ Start-Process powershell -ArgumentList @(
 Start-Sleep -Seconds 10
 
 Write-Host ""
-Write-Host "Starting inventory-service..." -ForegroundColor Green
+Write-Host "Starting inventory-service..." -ForegroundColor Cyan
 
 Start-Process powershell -ArgumentList @(
     "-NoExit",
