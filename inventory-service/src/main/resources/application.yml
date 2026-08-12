@@ -22,4 +22,4 @@ spring:
 logging:
   level:
     org.springframework.kafka: INFO
-    com.example.inventoryservice: DEBUG
+    org.example.inventoryservice: DEBUG

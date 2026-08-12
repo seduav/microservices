@@ -5,6 +5,17 @@ spring:
   application:
     name: order-service
 
+  datasource:
+    url: jdbc:postgresql://localhost:5432/orders
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
   kafka:
     bootstrap-servers: localhost:9092
 
@@ -18,4 +29,4 @@ spring:
 logging:
   level:
     org.springframework.kafka: INFO
-    com.example.orderservice: DEBUG
+    org.example.orderservice: DEBUG

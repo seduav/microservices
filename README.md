@@ -11,33 +11,167 @@ Event-driven microservices example using:
 ## Project Structure
 
 ```
-microservices
+microservices/
 │
 ├── event-contracts/
-│   └── src/main/java/
-│       └── org/example/events/
-│           └── OrderEvent.java
+│   ├── src/
+│   │   └── main/
+│   │       └── java/
+│   │           └── org/example/events/
+│   │               ├── OrderEvent.java
+│   │               ├── InventoryResult.java
+│   │               └── InventoryStatus.java
+│   │
+│   └── build.gradle.kts
 │
 ├── inventory-service/
-│   └── src/main/java/
-│       └── org/example/inventoryservice/
-│           └── InventoryServiceApplication.java
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── org/example/inventoryservice/
+│   │   │   │       ├── config/
+│   │   │   │       │   ├── KafkaConsumerConfig.java
+│   │   │   │       │   └── KafkaProducerConfig.java
+│   │   │   │       │
+│   │   │   │       ├── consumer/
+│   │   │   │       │   └── InventoryConsumer.java
+│   │   │   │       │
+│   │   │   │       ├── producer/
+│   │   │   │       │   └── InventoryProducer.java
+│   │   │   │       │
+│   │   │   │       └── InventoryServiceApplication.java
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       └── application.yml
+│   │   │
+│   │   └── test/
+│   │       └── ...
+│   │
+│   └── build.gradle.kts
 │
 ├── order-service/
-│   ├── src/main/java/
-│   │   └── org/example/orderservice/
-│   │       └── OrderServiceApplication.java
-│   └── test.http
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── org/example/orderservice/
+│   │   │   │       │
+│   │   │   │       ├── config/
+│   │   │   │       │   ├── KafkaConsumerConfig.java
+│   │   │   │       │   └── KafkaProducerConfig.java
+│   │   │   │       │
+│   │   │   │       ├── consumer/
+│   │   │   │       │   └── InventoryResultConsumer.java
+│   │   │   │       │
+│   │   │   │       ├── controller/
+│   │   │   │       │   └── OrderController.java
+│   │   │   │       │
+│   │   │   │       ├── dto/
+│   │   │   │       │   └── OrderRequest.java
+│   │   │   │       │
+│   │   │   │       ├── entity/
+│   │   │   │       │   ├── Order.java
+│   │   │   │       │   └── OrderStatus.java
+│   │   │   │       │
+│   │   │   │       ├── producer/
+│   │   │   │       │   └── OrderProducer.java
+│   │   │   │       │
+│   │   │   │       ├── repository/
+│   │   │   │       │   └── OrderRepository.java
+│   │   │   │       │
+│   │   │   │       ├── service/
+│   │   │   │       │   └── InventoryResultConsumer.java
+│   │   │   │       │
+│   │   │   │       └── OrderServiceApplication.java
+│   │   │   │
+│   │   │   └── resources/
+│   │   │       └── application.yml
+│   │   │
+│   │   └── test/
+│   │       └── ...
+│   │
+│   ├── test-quantity-available.http
+│   ├── test-negative-quantity.http
+│   ├── test-null-product.http
+│   ├── test-out-of-stock.http
+│   ├── test-quantity-0.http
+│   └── build.gradle.kts
 │
 ├── scripts/
 │   ├── create-kafka-topic.bat
 │   ├── init-kafka.bat
 │   └── start-kafka.bat
 │
+├── connect-orders.ps1
 ├── run-services.ps1
 ├── start-local-env.ps1
+├── build.gradle.kts
+├── settings.gradle.kts
 └── README.md
 ```
+
+# PostgreSQL Local Development
+
+## Option 1: Connecting to the orders Database using provided script (Recommended)
+
+The project includes a connect-orders.ps1 PowerShell script for connecting to the local PostgreSQL orders database.
+
+### What the Script Does
+
+The script automatically:
+
+- Detects the newest installed PostgreSQL version under C:\Program Files\PostgreSQL\.
+- Locates psql.exe and pg_ctl.exe.
+- Finds the PostgreSQL data directory.
+- Detects the configured PostgreSQL port.
+- Checks whether PostgreSQL is already running.
+- Starts PostgreSQL when necessary.
+- Opens/uses a non-administrator PowerShell session when the script is launched from an elevated environment.
+- Connects to the orders database using the postgres user.
+
+### Running the Script
+
+Open PowerShell in the project directory and run:
+
+```cmd
+.\connect-orders.ps1
+```
+
+The script will automatically detect the installed PostgreSQL version and configure the connection accordingly.
+
+### Checking the orders Table
+After connecting to the database, run the following query to view the contents of the orders table:
+
+```cmd
+SELECT id, customer_id, product, quantity, status, created_at
+FROM orders;
+```
+
+## Option 2: Manual Alternative
+
+Instead of using connect-orders.ps1, PostgreSQL can also be started and accessed manually.
+
+For example, start PostgreSQL using pg_ctl:
+
+```cmd
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" `
+    -D "C:\Program Files\PostgreSQL\18\data" `
+-l "C:\Program Files\PostgreSQL\18\data\postgres-start.log" `
+start
+```
+
+Then connect to the orders database using psql:
+
+```cmd
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" `
+    -h localhost `
+-p 5432 `
+    -U postgres `
+-d orders
+```
+
+The PostgreSQL version, data directory, and port may need to be adjusted depending on the local installation.
+
+> **Note:** PostgreSQL should be started using a non-administrator Windows account. If IntelliJ IDEA or PowerShell is running with administrator privileges, use a normal (non-elevated) terminal for starting PostgreSQL.
 
 ---
 
@@ -56,7 +190,7 @@ The repository includes a startup script that automatically:
 
 ---
 
-## First-time setup
+### First-time setup
 
 Before running the complete startup script for the first time, Kafka storage must be initialized.
 
@@ -76,7 +210,7 @@ This will:
 
 ---
 
-## Start everything
+### Start everything
 
 After Kafka storage has been initialized, run:
 
@@ -108,7 +242,7 @@ start-local-env.ps1
 
 ---
 
-## Kafka installation path
+### Kafka installation path
 
 The provided Kafka scripts expect Kafka to be installed in the kafka folder inside your Windows user profile:
 
@@ -119,9 +253,9 @@ C:\Users\<Your_User>\kafka
 The scripts automatically detect the current Windows username, so no manual changes are required.
 
 
-# Option 2: Automated Kafka and Service Startup
+## Option 2: Automated Kafka and Service Startup
 
-## Start Kafka
+### Start Kafka
 
 Run:
 
@@ -137,7 +271,7 @@ localhost:9092
 
 ---
 
-## Create Kafka Topic
+### Create Kafka Topic
 
 The services use the `order-created` Kafka topic for communication.
 
@@ -169,7 +303,7 @@ order-created
 
 ---
 
-## Start Services
+### Start Services
 
 Run:
 
@@ -181,9 +315,9 @@ This starts both Spring Boot applications automatically.
 
 ---
 
-# Option 3: Manual Kafka Setup and Startup
+## Option 3: Manual Kafka Setup and Startup
 
-## 1. Format Kafka Storage
+### 1. Format Kafka Storage
 
 Generate a cluster ID:
 
@@ -208,7 +342,7 @@ bin/windows/kafka-storage.bat format ^
 
 ---
 
-## 2. Start Kafka
+### 2. Start Kafka
 
 Run:
 
@@ -235,6 +369,8 @@ Responsibilities:
 - Generates UUID order ID
 - Generates created time
 - Publishes events to Kafka
+- Consumes inventory-result
+- Updates order status in DB
 
 Endpoint:
 
@@ -359,7 +495,7 @@ There are two ways to send a request to the order service.
 The REST request is stored in:
 
 ```text
-order-service/test.http
+order-service/test-quantity-available.http
 ```
 
 Example:
@@ -375,7 +511,7 @@ Content-Type: application/json
 }
 ```
 
-Open `test.http` in IntelliJ and click:
+Open `test-quantity-available.http` in IntelliJ and click:
 
 ```text
 ▶ POST http://localhost:8080/orders
@@ -465,24 +601,65 @@ Quantity: 2
 
 The `OrderId` will be different for each request because a new UUID is generated for every order.
 
-### End-to-End Flow
+## Test Scenarios
 
-The complete flow is:
+### 1. Quantity ≤ 5 — AVAILABLE
 
-```text
-HTTP Request
-     │
-     ▼
-Order Service
-     │
-     ▼
-Kafka: order-created
-     │
-     ▼
-Consumer Service
-     │
-     ▼
-Processing order
+The REST request is stored in:
+```text 
+order-service/test-quantity-available.http
 ```
 
-If all three steps produce the expected output, the REST → Kafka → consumer flow is working correctly.
+Creates an order with a valid quantity between 1 and 5. The inventory service should return AVAILABLE, and the order status should be updated from NEW to AVAILABLE.
+
+### 2. Quantity > 5 — OUT_OF_STOCK
+
+The REST request is stored in:
+```text 
+order-service/test-out-of-stock.http
+```
+
+Creates an order with a quantity greater than 5. The inventory service should return OUT_OF_STOCK, and the order status should be updated accordingly in PostgreSQL.
+
+### 3. Quantity = 0 — 400 Bad Request
+
+The REST request is stored in:
+```text 
+order-service/test-quantity-0.http
+```
+
+Sends an order with quantity 0. Bean Validation should reject the request with 400 Bad Request. No order should be saved or published to Kafka.
+
+### 4. Quantity < 0 — 400 Bad Request
+
+The REST request is stored in:
+```text 
+order-service/test-negative-quantity.http
+```
+
+Sends an order with a negative quantity. The request should be rejected with 400 Bad Request, and no order or Kafka event should be created.
+
+### 5. Product = null — 400 Bad Request
+
+The REST request is stored in:
+```text 
+order-service/test-null-product.http
+```
+
+Sends an order with a null product. Bean Validation should reject the request with 400 Bad Request. No order should be saved to PostgreSQL or published to Kafka.
+
+## Processing Sequence
+
+1. Client sends `POST /orders`.
+2. Order Service validates the request.
+3. Order Service creates the order with status `NEW`.
+4. Order is saved to PostgreSQL.
+5. After a successful save, Order Service publishes the order event to Kafka.
+6. Inventory Service consumes the order event.
+7. Inventory Service checks the quantity:
+    - `quantity <= 5` → `AVAILABLE`
+    - `quantity > 5` → `OUT_OF_STOCK`
+8. Inventory Service publishes the inventory-result event.
+9. Order Service consumes inventory-result.
+10. Order Service finds the order by `orderId`.
+11. Order Service updates the status in PostgreSQL.
