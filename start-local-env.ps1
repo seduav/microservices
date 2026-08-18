@@ -9,9 +9,6 @@ Write-Host "Repository root: $repoRoot" -ForegroundColor Green
 
 Set-Location $repoRoot
 
-Write-Host ""
-Write-Host "Starting Kafka..." -ForegroundColor Green
-
 Start-Process cmd.exe -ArgumentList "/c `"$repoRoot\scripts\start-kafka.bat`""
 
 Write-Host ""
@@ -48,10 +45,6 @@ if (-not $kafkaReady) {
 
 Write-Host ""
 Write-Host "Kafka is running." -ForegroundColor Green
-
-
-Write-Host ""
-Write-Host "Creating Kafka topic..." -ForegroundColor Green
 
 $topicScript = Join-Path $repoRoot "scripts\create-kafka-topic.bat"
 
