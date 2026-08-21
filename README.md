@@ -8,10 +8,27 @@ Event-driven microservices example using:
 - Gradle Wrapper
 - IntelliJ IDEA
 
+---
+
 ## Project Structure
 
 ```
 microservices/
+│
+├── inventory-service/
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── org/example/dltmonitor/
+│   │       │       ├── consumer/
+│   │       │       │   └── DltConsumer.java
+│   │       │       │
+│   │       │       └── DltMonitorApplication.java
+│   │       │
+│   │       └── resources/
+│   │           └── application.yml
+│   │
+│   └── build.gradle.kts
 │
 ├── event-contracts/
 │   ├── src/
@@ -36,8 +53,14 @@ microservices/
 │   │   │   │       ├── consumer/
 │   │   │   │       │   └── InventoryConsumer.java
 │   │   │   │       │
+│   │   │   │       ├── entity/
+│   │   │   │       │   └── ProcessedMessage.java
+│   │   │   │       │
 │   │   │   │       ├── producer/
 │   │   │   │       │   └── InventoryProducer.java
+│   │   │   │       │
+│   │   │   │       ├── repository/
+│   │   │   │       │   └── ProcessedMessageRepository.java
 │   │   │   │       │
 │   │   │   │       └── InventoryServiceApplication.java
 │   │   │   │
@@ -46,6 +69,21 @@ microservices/
 │   │   │
 │   │   └── test/
 │   │       └── ...
+│   │
+│   └── build.gradle.kts
+│
+├── notification-service/
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── org/example/notificationservice/
+│   │       │       ├── consumer/
+│   │       │       │   └── NotificationConsumer.java
+│   │       │       │
+│   │       │       └── NotificationServiceApplication.java
+│   │       │
+│   │       └── resources/
+│   │           └── application.yml
 │   │
 │   └── build.gradle.kts
 │
@@ -109,7 +147,11 @@ microservices/
 └── README.md
 ```
 
+---
+
 # PostgreSQL Local Development
+
+---
 
 ## Option 1: Connecting to the orders Database using provided script (Recommended)
 
@@ -138,13 +180,18 @@ Open PowerShell in the project directory and run:
 
 The script will automatically detect the installed PostgreSQL version and configure the connection accordingly.
 
-### Checking the orders Table
-After connecting to the database, run the following query to view the contents of the orders table:
+### Checking the orders and processed_messages Tables
+After connecting to the database, run the following queries to inspect the contents of the `orders` and `processed_messages` tables:
 
-```cmd
-SELECT id, customer_id, product, quantity, status, created_at
-FROM orders;
+```sql
+SELECT * FROM orders;
 ```
+
+```sql
+SELECT * FROM processed_messages;
+```
+
+---
 
 ## Option 2: Manual Alternative
 
@@ -237,7 +284,11 @@ start-local-env.ps1
                 |
                 ├── order-service
                 |
-                └── inventory-service
+                ├── inventory-service
+                |
+                ├── dlt-monitor
+                |
+                └── notification-service
 ```
 
 ---
@@ -311,7 +362,7 @@ Run:
 .\run-services.ps1
 ```
 
-This starts both Spring Boot applications automatically.
+This starts all Spring Boot applications automatically.
 
 ---
 
@@ -368,9 +419,12 @@ Responsibilities:
 - Creates orders
 - Generates UUID order ID
 - Generates created time
-- Publishes events to Kafka
-- Consumes inventory-result
+- Validates incoming requests
+- Stores orders in PostgreSQL
+- Publishes `order-created events` to Kafka after a successful database save
+- Consumes `inventory-result` events
 - Updates order status in DB
+- Supports Kafka retry and error handling
 
 Endpoint:
 
@@ -413,15 +467,29 @@ http://localhost:8080
 Responsibilities:
 
 - Consumes `order-created` Kafka messages
-- Prints order information
+- Processes each order
+- Performs idempotency checks using the `processed_messages` table
+- Simulates inventory availability
+- Returns `AVAILABLE` when quantity is `<= 5`
+- Returns `OUT_OF_STOCK` when quantity is `> 5`
+- Publishes the result to the `inventory-result` Kafka topic
+- Supports Kafka retries and error handling
 
 Example output:
 
 ```
+==============================
 Processing order:
 OrderId: abc-123
 Product: Laptop
 Quantity: 2
+==============================
+```
+
+For duplicate events:
+
+```
+Duplicate message ignored: abc-123
 ```
 
 Runs on:
@@ -432,7 +500,65 @@ http://localhost:8081
 
 ---
 
-# Running Both Services
+## 3. dlt-monitor
+
+Responsibilities:
+
+- Consumes failed messages from the `order-created.DLT` topic
+- Monitors messages that could not be processed after all configured retries
+- Prints failed messages for monitoring/debugging purposes
+
+Example output:
+
+```
+==============================
+FAILED MESSAGE FROM DLT
+==============================
+OrderId: abc-123
+CustomerId: 15
+Product: Laptop
+Quantity: 2
+==============================
+```
+
+Runs on:
+
+```
+http://localhost:8082
+```
+
+---
+
+## 4. notification-service
+
+Responsibilities:
+
+- Consumes `order-created` Kafka messages
+- Demonstrates Kafka publish/subscribe behavior
+- Pretends to send an email notification to the customer
+- Processes the same `order-created` event independently from `inventory-service`
+
+Example output:
+
+```
+==============================
+Email sent to customer
+CustomerId: 15
+OrderId: abc-123
+Product: Laptop
+Quantity: 2
+==============================
+```
+
+Runs on:
+
+```
+http://localhost:8083
+```
+
+---
+
+# Running All Services
 
 The project contains:
 
@@ -440,7 +566,7 @@ The project contains:
 run-services.ps1
 ```
 
-This script starts both Spring Boot applications automatically.
+This script starts all Spring Boot applications automatically.
 
 Run:
 
@@ -448,43 +574,26 @@ Run:
 .\run-services.ps1
 ```
 
-It opens two PowerShell windows.
+It opens four PowerShell windows.
 
-## order-service
+| Service                |  Port  |
+| ---------------------- |:------:|
+| `order-service`        | `8080` |
+| `inventory-service`    | `8081` |
+| `dlt-monitor`          | `8082` |
+| `notification-service` | `8083` |
 
-Runs:
-
-```powershell
-.\gradlew bootRun
-```
-
-Expected:
-
-```
-Tomcat started on port 8080
-```
-
----
-
-## inventory-service
-
-Runs:
+All services use the same Gradle command to start:
 
 ```powershell
 .\gradlew bootRun
-```
-
-Expected:
-
-```
-Tomcat started on port 8081
 ```
 
 ---
 
 # Testing
 
-This section explains how to test the order service and verify that the order is successfully published to Kafka and processed by the consuming service.
+This section explains how to test the `order-service`, verify Kafka communication, confirm inventory processing, test validation, idempotency, retries, DLT handling, and verify the notification service.
 
 ## 1. Send an Order Request
 
@@ -521,13 +630,15 @@ The expected response is:
 
 ```json
 {
-  "orderId": "generated-uuid",
+  "orderId": "abc-123",
   "customerId": 15,
   "product": "Laptop",
   "quantity": 2,
   "createdTime": "2026-08-06T22:30:00"
 }
 ```
+
+The `orderId` and `createdTime` are generated by the order-service
 
 ### Option 2: PowerShell
 
@@ -584,22 +695,78 @@ Kafka should display a message similar to:
 }
 ```
 
+The event is published only after the order has been successfully saved to PostgreSQL.
+
 ---
 
 ## 3. Verify Order Processing
 
-The consuming service should receive the Kafka message and process the order.
+The `inventory-service` consumes the `order-created` event.
 
-The service should output:
+For an order with quantity `2`, the inventory service should output:
 
 ```text
+==============================
 Processing order:
 OrderId: abc-123
 Product: Laptop
 Quantity: 2
+==============================
+```
+
+Since the quantity is `<= 5`, the inventory service should publish an `inventory-result` event with:
+
+```json
+{
+"orderId": "abc-123",
+"status": "AVAILABLE"
+}
+```
+
+The order-service consumes this event and updates the order status in PostgreSQL from:
+
+```text
+NEW
+```
+
+to
+
+```text
+AVAILABLE
 ```
 
 The `OrderId` will be different for each request because a new UUID is generated for every order.
+
+---
+
+## 4. Verify Notification Service
+
+The `notification-service` also consumes the `order-created` event.
+
+After creating an order, the notification service should print:
+
+```text
+==============================
+Email sent to customer
+CustomerId: 15
+OrderId: abc-123
+Product: Laptop
+Quantity: 2
+==============================
+```
+
+This demonstrates Kafka pub/sub behavior.
+
+The same `order-created` event is consumed independently by:
+
+```text
+inventory-service
+notification-service
+```
+
+Each service should use a different Kafka consumer group.
+
+---
 
 ## Test Scenarios
 
@@ -648,18 +815,168 @@ order-service/test-null-product.http
 
 Sends an order with a null product. Bean Validation should reject the request with 400 Bad Request. No order should be saved to PostgreSQL or published to Kafka.
 
+### Idempotency Test
+
+The `inventory-service` uses the `processed_messages` table to prevent the same `orderId` from being processed more than once.
+
+Create an order. Copy the generated orderId from the response.
+
+For example:
+
+```text
+orderId: abc-123
+```
+
+The inventory-service should process the event normally:
+
+```text
+==============================
+Processing order:
+OrderId: abc-123
+Product: Laptop
+Quantity: 2
+==============================
+```
+
+The order should be recorded in the `processed_messages` table.
+
+Publish the same `orderId` to the `order-created` topic.
+
+The event should contain the same `orderId`:
+
+```json
+{
+"orderId": "abc-123",
+"customerId": 15,
+"product": "Laptop",
+"quantity": 2
+}
+```
+
+Send the same event multiple times.
+
+The first event should be processed:
+
+```text
+==============================
+Processing order:
+OrderId: abc-123
+Product: Laptop
+Quantity: 2
+==============================
+```
+
+The duplicate event should be ignored:
+
+```text
+==============================
+Duplicate order ignored: abc-123
+==============================
+```
+
+The order should not be processed again.
+
+Verify the database. 
+
+Run:
+
+```sql
+SELECT *
+FROM processed_messages
+WHERE order_id = 'abc-123';
+```
+
+Only one record should exist for the orderId.
+
+### Dead Letter Topic Test
+
+To test the DLT, the message must fail after all configured retry attempts.
+
+After all retries are exhausted, the message should be published to:
+
+```text
+order-created.DLT
+```
+
+The `dlt-monitor` service consumes this topic.
+
+Expected output:
+
+```text
+==============================
+FAILED MESSAGE FROM DLT
+==============================
+OrderId: abc-123
+CustomerId: 15
+Product: Laptop
+Quantity: 2
+==============================
+```
+
+After processing an order, check PostgreSQL.
+
+The failed message must not be stored in the `processed_messages` table because the order was never successfully processed.
+
+Run:
+
+```sql
+SELECT *
+FROM processed_messages
+WHERE order_id = 'abc-123';
+```
+
+Expected result:
+
+```text
+No rows
+```
+
+The order should still exist in the `orders` table because it was successfully saved by the `order-service` before the Kafka event was published.
+
+However, its status should remain:
+
+```text
+NEW
+```
+
+Run:
+
+```sql
+SELECT *
+FROM orders
+WHERE id = 'abc-123';
+```
+
+Expected result:
+
+
+|   Id    | customer_id | product  | quantity | status | created_at |
+|:-------:|:-----------:|:--------:|:--------:|:------:|:----------:|
+| abc-123 |      15     |  Laptop  |    2     |  NEW   |     ...    |
+
+---
+
 ## Processing Sequence
 
 1. Client sends `POST /orders`.
 2. Order Service validates the request.
-3. Order Service creates the order with status `NEW`.
-4. Order is saved to PostgreSQL.
-5. After a successful save, Order Service publishes the order event to Kafka.
-6. Inventory Service consumes the order event.
-7. Inventory Service checks the quantity:
-    - `quantity <= 5` → `AVAILABLE`
-    - `quantity > 5` → `OUT_OF_STOCK`
-8. Inventory Service publishes the inventory-result event.
-9. Order Service consumes inventory-result.
-10. Order Service finds the order by `orderId`.
-11. Order Service updates the status in PostgreSQL.
+3. Order Service generates a UUID `orderId` and `createdTime`.
+4. Order Service creates the order with status `NEW`.
+5. Order Service saves the order to PostgreSQL.
+6. After a successful database save, Order Service publishes the `order-created` event to Kafka.
+7. Both Inventory Service and Notification Service consume the `order-created` event independently.
+8. Inventory Service checks whether the event has already been processed:
+   - Already processed → the duplicate event is ignored.
+   - Not processed → the order is processed.
+9. Inventory Service checks the quantity:
+   - `quantity <= 5` → `AVAILABLE`
+   - `quantity > 5` → `OUT_OF_STOCK`
+10. Inventory Service saves the processed message for idempotency.
+11. Inventory Service publishes the `inventory-result` event to Kafka.
+12. Notification Service processes the order event and simulates sending an email to the customer.
+13. Order Service consumes the `inventory-result` event.
+14. Order Service finds the order by `orderId`.
+15. Order Service updates the order status in PostgreSQL.
+16. If Inventory Service processing fails, Kafka retries the message according to the configured retry/backoff policy.
+17. If processing still fails after all retries, the message is published to `order-created.DLT`.
+18. DLT Monitor consumes the failed message from `order-created.DLT` and prints it for monitoring.
